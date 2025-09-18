@@ -1,0 +1,2 @@
+# saricoin
+stablecoin
