@@ -1,54 +1,105 @@
-# SariCoin Stablecoin
+# SARI – Speculative Adaptive Resonance Instrument
 
-SariCoin (**SARI**) is an ERC-20 compatible stablecoin aimed at tracking the value of one United States Dollar. The contract is built on top of OpenZeppelin primitives to provide audited token, access-control, and pausability features. Governance wallets with the correct roles can mint and burn supply in order to keep the token fully collateralised.
+SARI is an experimental ERC-20 token that models a cyclic market dynamic. Holders accumulate "frequency" based on transfer
+activity; once their local oscillation crosses a threshold the protocol triggers an **impact** that burns part of their balance,
+energises the global resonance variable `F`, and optionally routes freshly minted rewards to a vesting vault. A keeper maintains
+the system with periodic `tick()` calls that dissipate energy into an accumulated buffer `E`, and a lightweight pricing heuristic
+derives an indicative reference price from mocked oracle feeds.
 
-## Features
+The repository ships as a complete Hardhat + TypeScript project with extensive test coverage, mocks for all external
+integration points, and deployment utilities suitable for local experimentation.
 
-- **Role based access control** – an administrator can delegate minting and pausing permissions to other wallets.
-- **Pausable transfers** – minting, burning, and transfers can be halted in emergency scenarios.
-- **Configurable initial supply** – the constructor mints an optional starting supply to a treasury wallet.
-- **Deployment script and tests** – Hardhat scripts show how to deploy and validate the contract.
+## Key Concepts
 
-## Project Structure
+- **Cyclic activity tracking** – user transfers update their personal frequency `freq[user]` in 1e6 precision. Impacts reset the
+  user to `fBase`, increase the resonance `F`, and apply burn and reward tokenomics.
+- **Anti-manipulation guard rails** – per-block impact caps, per-user cooldowns, a circuit breaker, dynamic surcharge fees when `F`
+  overheats, and pausability mitigate abusive behaviour.
+- **Reward vesting vault** – the `RewardVault` contract escrows mint-on-impact rewards and releases them linearly over 30 days.
+- **Reference pricing** – `refPrice()` mixes oracle data with oscillatory premiums using an on-chain sine approximation to yield
+  a pseudo price in 1e6 precision.
+- **Role separation** – the deployer receives `DEFAULT_ADMIN_ROLE`, `PARAM_ROLE`, and `KEEPER_ROLE` for governance, parameter
+  management, and upkeep tasks respectively.
+
+## Contract Topology
 
 ```
-contracts/        Solidity smart contracts
-scripts/          Hardhat deployment utilities
-test/             Mocha/Chai based unit tests
-hardhat.config.js Hardhat configuration file
+contracts/
+  SARI.sol                   Core ERC20 logic with cyclic impact model
+  RewardVault.sol            Linear vesting vault for impact rewards
+  interfaces/
+    IPriceOracle.sol         Mockable oracle returning prices in 1e8 precision
+    ILiquidityLens.sol       Liquidity metrics provider (L, S, sell pressure)
+  mocks/
+    PriceOracleMock.sol      Simple configurable price feed for tests
+    LiquidityLensMock.sol    Mock liquidity metrics
+    ImpactHelper.sol         Test helper batching transfers in a single tx
 ```
 
-## Getting Started
+SARI relies on OpenZeppelin's `ERC20`, `ERC20Permit`, `Ownable2Step`, `Pausable`, `ReentrancyGuard`, and `AccessControl`
+primitives. The reward vault and mocks are pure Solidity contracts with no external dependencies beyond OpenZeppelin.
 
-1. Install dependencies (requires Node.js 18+):
-   ```bash
-   npm install
-   ```
-2. Compile the contracts:
-   ```bash
-   npx hardhat compile
-   ```
-3. Run the test suite:
-   ```bash
-   npx hardhat test
-   ```
-4. Deploy to a local Hardhat network:
-   ```bash
-   npx hardhat run scripts/deploy.js
-   ```
+## Default Parameter Set
 
-## Contract Constructor Arguments
+The deployment script (`scripts/deploy_sari.ts`) configures the protocol with the following values:
 
-```solidity
-constructor(address admin, address treasury, uint256 initialSupply)
+| Parameter | Value | Units |
+|-----------|-------|-------|
+| `fBase` | 1,000,000 | frequency (1e6) |
+| `fMax` | 10,000,000 | frequency (1e6) |
+| `gamma` | 50,000 | ppm (1e6 base) |
+| `alpha` | 800,000 | ppm (1e6 base) |
+| `beta` | 100,000 | ppm (1e6 base) |
+| `delta` | 100,000 | ppm (1e6 base) |
+| `kappa` | 300,000 | resonance impulse (1e6) |
+| `burnBps` | 100 | basis points (1e4) |
+| `rewardPerImpact` | 0 | 18-decimal tokens |
+| `epochBlocks` | 200 | blocks |
+| `maxImpactsPerBlock` | 5 | impacts |
+| `impactCooldownBlocks` | 40 | blocks |
+| `Fhigh` | 50,000,000 | resonance (1e6) |
+| `surchargeFeeBps` | 25 | basis points (1e4) |
+
+Price parameters are initialised with moderate oscillation coefficients, oracle mocks default to a $1.00 feed (1e8 precision),
+and the liquidity lens reports unit liquidity/supply with no sell pressure.
+
+## Scripts
+
+- `scripts/deploy_sari.ts` – deploys oracle mocks, the reward vault, and the SARI token with default parameters, then wires the
+  vault to the token.
+- `scripts/set_params.ts` – updates the SARI contract with the baseline parameter set. Provide the target address via the
+  `SARI_ADDRESS` environment variable or as the first positional argument.
+
+Run a script with Hardhat:
+
+```bash
+npx hardhat run scripts/deploy_sari.ts
+SARI_ADDRESS=0xTokenAddress npx hardhat run scripts/set_params.ts
 ```
 
-- `admin` – receives the admin, minter, and pauser roles.
-- `treasury` – receives the optional initial supply.
-- `initialSupply` – amount of tokens to mint (use 18 decimals).
+## Testing & Coverage
 
-## Security Considerations
+Install dependencies (Node.js 18+ recommended) and execute the TypeScript test suites:
 
-- Always secure the admin wallet with hardware-backed key management.
-- Review minting policies to ensure the circulating supply remains fully backed by reserves.
-- Pause functionality should only be used to react to security incidents or severe market stress.
+```bash
+npm install
+npm run build
+npm test
+npm run coverage
+```
+
+The tests cover:
+
+- Impact emission, burn mechanics, and reward vault accrual
+- Keeper `tick()` decay behaviour
+- Parameter updates, pausing, and circuit breaker logic
+- Anti-abuse restrictions (impact cap, cooldown, surcharge)
+- Reward vault vesting and claims
+- Reference pricing responsiveness to oracle inputs
+
+## Security Notes
+
+- The circuit breaker, pausing, and parameter management functions should be delegated to multisig or hardware wallets.
+- Oracle and liquidity lens addresses are mocks in this repository; real deployments must integrate robust feeds.
+- Reward minting is disabled by default (`rewardPerImpact = 0`). Carefully review the economic implications before enabling.
+- Impact logic leverages pseudo-random noise derived from `block.prevrandao` and should not be considered tamper-proof.
