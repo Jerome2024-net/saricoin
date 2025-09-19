@@ -1,0 +1,32 @@
+{
+  "name": "sari",
+  "version": "1.0.0",
+  "description": "SARI speculative cyclic token project",
+  "main": "index.js",
+  "scripts": {
+    "build": "hardhat compile",
+    "lint": "echo \"No lint configured\"",
+    "test": "hardhat test",
+    "coverage": "hardhat coverage"
+  },
+  "keywords": [
+    "sari",
+    "erc20",
+    "solidity"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@types/node": "^18.19.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.5",
+    "solidity-coverage": "^0.8.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.1"
+  }
+}
