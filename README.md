@@ -70,12 +70,29 @@ and the liquidity lens reports unit liquidity/supply with no sell pressure.
 - `scripts/set_params.ts` – updates the SARI contract with the baseline parameter set. Provide the target address via the
   `SARI_ADDRESS` environment variable or as the first positional argument.
 
+Copy `.env.example` to `.env` and populate RPC URLs plus a private key for the account that will pay deployment gas. You can
+provide a shared key via `DEPLOYER_PRIVATE_KEY` or override per network with `SEPOLIA_PRIVATE_KEY` / `BSC_TESTNET_PRIVATE_KEY`.
+
 Run a script with Hardhat:
 
 ```bash
 npx hardhat run scripts/deploy_sari.ts
 SARI_ADDRESS=0xTokenAddress npx hardhat run scripts/set_params.ts
 ```
+
+## Testnet Deployment (Sepolia / BSC)
+
+The Hardhat configuration exposes Sepolia and BSC testnet targets so you can deploy SARI end-to-end on public chains. Assuming
+your `.env` contains the required RPC URL and private key, deploy with:
+
+```bash
+npx hardhat run scripts/deploy_sari.ts --network sepolia
+npx hardhat run scripts/deploy_sari.ts --network bsctestnet
+```
+
+The deployment script instantiates new oracle mocks, the reward vault, and the SARI token on the selected network. Note the
+addresses emitted by the script and copy the SARI address into `scripts/set_params.ts` (via `SARI_ADDRESS`) if you need to
+reapply parameters or update coefficients after launch.
 
 ## Testing & Coverage
 
